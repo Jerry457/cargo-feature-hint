@@ -1,0 +1,41 @@
+{
+    "name": "rust-cargo-feature",
+    "version": "0.0.1",
+    "publisher": "Jerry457",
+    "engines": {
+        "vscode": "^1.100.0"
+    },
+    "categories": [
+        "Other"
+    ],
+    "repository": {
+        "type": "git"
+    },
+    "activationEvents": [
+        "onLanguage:toml"
+    ],
+    "main": "./dist/src/extension.js",
+    "contributes": {
+        "languages": [
+            {
+                "id": "toml",
+                "filenames": [
+                    "Cargo.toml"
+                ]
+            }
+        ]
+    },
+    "scripts": {
+        "watch": "tsc --watch -p ./",
+        "dev": "pnpm run build && pnpm run watch",
+        "build": "tsc -p ./",
+        "package": "vsce package",
+        "publish": "vsce publish"
+    },
+    "devDependencies": {
+        "@types/node": "^25.0.9",
+        "@types/vscode": "^1.100.0",
+        "typescript": "~5.9.3"
+    },
+    "dependencies": {}
+}
