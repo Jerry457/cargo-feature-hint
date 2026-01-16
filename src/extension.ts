@@ -2,7 +2,7 @@ import * as vscode from "vscode"
 import axios from "axios"
 
 const featuresCache = new Map<string, string[]>()
-console.log("activate")
+
 export function activate(context: vscode.ExtensionContext) {
     const selector: vscode.DocumentFilter = { language: "toml", pattern: "**/Cargo.toml" }
 
@@ -12,7 +12,7 @@ export function activate(context: vscode.ExtensionContext) {
             const lineText = lineAt.text
             const linePrefix = lineText.substring(0, position.character)
 
-            // math features = [ ... " ()
+            // math features = [ ...
             if (!linePrefix.match(/features\s*=\s*\[[^\]]*["']$/)) {
                 return undefined
             }
@@ -20,10 +20,12 @@ export function activate(context: vscode.ExtensionContext) {
             if (!crateName) {
                 return undefined
             }
-            console.log(`crateName: ${crateName}`)
+
             const features = await fetchCrateFeatures(crateName)
-            console.log(`features: ${features}`)
-            return features.map(f => {
+            const existingFeatures = getExistingFeatures(lineText)
+            const filteredFeatures = features.filter(f => !existingFeatures.has(f))
+
+            return filteredFeatures.map(f => {
                 const item = new vscode.CompletionItem(f, vscode.CompletionItemKind.Property)
                 item.detail = `feature of ${crateName}`
                 return item
@@ -58,6 +60,15 @@ function getCrateName(document: vscode.TextDocument, position: vscode.Position):
         }
     }
     return undefined
+}
+
+function getExistingFeatures(lineText: string): Set<string> {
+    const featuresMatch = lineText.match(/features\s*=\s*\[([^\]]*)\]/)
+    if (!featuresMatch) return new Set()
+
+    const content = featuresMatch[1]
+    const existing = content.match(/["']([^"']+)["']/g) || []
+    return new Set(existing.map(s => s.replace(/["']/g, "")))
 }
 
 async function fetchCrateFeatures(crateName: string): Promise<string[]> {
