@@ -1,6 +1,6 @@
 {
     "name": "cargo-feature-autocomplete",
-    "version": "0.0.1",
+    "version": "1.0.0",
     "publisher": "Jerry457",
     "engines": {
         "vscode": "^1.100.0"
@@ -29,7 +29,7 @@
         "watch": "tsc --watch -p ./",
         "dev": "pnpm run build && pnpm run watch",
         "build": "tsc -p ./",
-        "package": "vsce package",
+        "package": "pnpm i && pnpm run build && vsce package",
         "publish": "vsce publish"
     },
     "devDependencies": {
