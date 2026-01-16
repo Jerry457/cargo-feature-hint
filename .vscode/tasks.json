@@ -14,58 +14,8 @@
             }
         },
         {
-            "label": "dev-webview",
-            "type": "shell",
-            "command": "pnpm run dev:webview",
-            "isBackground": true,
-            "problemMatcher": {
-                "owner": "custom",
-                "pattern": [
-                    {
-                        "regexp": "^()$",
-                        "file": 1,
-                        "message": 0,
-                        "kind": "file"
-                    }
-                ],
-                "background": {
-                    "activeOnStart": true,
-                    "beginsPattern": "^\\s*VITE",
-                    "endsPattern": "ready in"
-                }
-            },
-            "presentation": {
-                "reveal": "always"
-            }
-        },
-        // {
-        //     "label": "dev-server",
-        //     "type": "shell",
-        //     "command": "pnpm run dev:server",
-        //     "isBackground": true,
-        //     "problemMatcher": {
-        //         "owner": "custom",
-        //         "pattern": [
-        //             {
-        //                 "regexp": "^()$",
-        //                 "file": 1,
-        //                 "message": 0,
-        //                 "kind": "file"
-        //             }
-        //         ],
-        //         "background": {
-        //             "activeOnStart": true,
-        //             "beginsPattern": "^\\s*Finished",
-        //             "endsPattern": "profile"
-        //         }
-        //     },
-        //     "presentation": {
-        //         "reveal": "always"
-        //     }
-        // },
-        {
             "label": "debug",
-            "dependsOn": ["dev", "dev-webview"],
+            "dependsOn": ["dev"],
             "dependsOrder": "parallel"
         }
     ]
