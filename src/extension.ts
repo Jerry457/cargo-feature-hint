@@ -2,8 +2,14 @@ import * as vscode from "vscode"
 import axios from "axios"
 import * as fs from "fs"
 import * as path from "path"
+
+type FeatureInfo = {
+    name: string
+    enable: string[]
+}
+
 // <name@version, features>
-const featuresCache = new Map<string, string[]>()
+const featuresCache = new Map<string, FeatureInfo[]>()
 
 export function activate(context: vscode.ExtensionContext) {
     const selector: vscode.DocumentFilter = { language: "toml", pattern: "**/Cargo.toml" }
@@ -15,14 +21,14 @@ export function activate(context: vscode.ExtensionContext) {
             const linePrefix = lineText.substring(0, position.character)
 
             // math features = [ ...
-            if (!linePrefix.match(/features\s*=\s*\[[^\]]*["']$/)) {
+            if (!linePrefix.match(/features\s*=\s*\[[^\]]*["']([^"']*)$/)) {
                 return undefined
             }
 
             const crateInfo = getCrateInfo(document, position)
             if (!crateInfo) return undefined
 
-            let features: string[] = []
+            let features = []
             if (crateInfo.path) {
                 features = fetchLocalCrateFeatures(crateInfo.path)
             } else {
@@ -30,13 +36,20 @@ export function activate(context: vscode.ExtensionContext) {
             }
 
             const existingFeatures = getExistingFeatures(lineText)
-            const filteredFeatures = features.filter(f => !existingFeatures.has(f))
+            const filteredFeatures = features.filter(feature => !existingFeatures.has(feature.name))
 
-            return filteredFeatures.map(f => {
-                const item = new vscode.CompletionItem(f, vscode.CompletionItemKind.Property)
+            return filteredFeatures.map(feature => {
+                const item = new vscode.CompletionItem(feature.name, vscode.CompletionItemKind.Property)
+
                 item.detail = crateInfo.path
-                    ? `local feature of ${crateInfo.crateName}`
-                    : `feature ${crateInfo.version || "latest"} of ${crateInfo.crateName}`
+                    ? `[Local] ${crateInfo.crateName}`
+                    : `[Remote] ${crateInfo.crateName}@${crateInfo.version || "latest"}`
+
+                if (feature.enable.length > 0) {
+                    const activationList = feature.enable.join(", ")
+                    item.detail = item.detail + ` enable:(${activationList})`
+                }
+
                 return item
             })
         },
@@ -62,7 +75,7 @@ function getCrateInfo(
     const currentLine = document.lineAt(position.line).text
     const documentDir = path.dirname(document.uri.fsPath)
 
-    // serde = { version = "1.0", path = "../serde", features = ["
+    // math feature-name = { version = "1.0", path = "../serde", features = ["
     const inlineMatch = currentLine.match(/^\s*([\w-]+)\s*=\s*\{/)
     if (inlineMatch) {
         const crateName = inlineMatch[1]
@@ -76,7 +89,7 @@ function getCrateInfo(
         }
     }
 
-    // [dependencies.tokio]
+    // math [dependencies.feature-name]
     for (let i = position.line - 1; i >= 0; i--) {
         const line = document.lineAt(i).text.trim()
         const tableMatch = line.match(/^\[(?:[a-z-]+\.)([\w-]+)\]/)
@@ -104,13 +117,13 @@ function getCrateInfo(
     return undefined
 }
 
-function fetchLocalCrateFeatures(cratePath: string): string[] {
+function fetchLocalCrateFeatures(cratePath: string): FeatureInfo[] {
     try {
         const tomlPath = path.join(cratePath, "Cargo.toml")
         if (!fs.existsSync(tomlPath)) return []
 
         const content = fs.readFileSync(tomlPath, "utf-8")
-        const features: string[] = []
+        const features: FeatureInfo[] = []
         let inFeaturesSection = false
 
         for (const line of content.split(/\r?\n/)) {
@@ -125,24 +138,34 @@ function fetchLocalCrateFeatures(cratePath: string): string[] {
             }
 
             if (inFeaturesSection) {
-                const match = trimmed.match(/^([\w-]+)\s*=/)
+                // math feature-name = ["dep1", "dep2"]
+                const match = trimmed.match(/^([\w-]+)\s*=\s*\[(.*?)\]/)
                 if (match) {
-                    features.push(match[1])
+                    const name = match[1]
+                    const activates = []
+                    for (const s of match[2].split(",")) {
+                        let activate = s.trim().replace(/["']/g, "")
+                        if (activate !== "") activates.push(activate)
+                    }
+                    features.push({ name, enable: activates })
+                } else {
+                    // math feature-name = [] or feature-name = ""
+                    const simpleMatch = trimmed.match(/^([\w-]+)\s*=/)
+                    if (simpleMatch) features.push({ name: simpleMatch[1], enable: [] })
                 }
             }
         }
         return features
     } catch (e) {
-        console.error("Failed to fetch features for local crate", e)
         return []
     }
 }
 
 type CargoVersionInfo = {
     num: string // version number
-    features: { [feature: string]: string[] }
+    features: { [name: string]: FeatureInfo["enable"] }
 }
-async function fetchCrateFeatures(crateName: string, version?: string): Promise<string[]> {
+async function fetchCrateFeatures(crateName: string, version?: string): Promise<FeatureInfo[]> {
     const crateNameVerson = version ? `${crateName}@${version}` : `${crateName}@latest`
     if (featuresCache.has(crateNameVerson)) {
         return featuresCache.get(crateNameVerson)!
@@ -172,8 +195,13 @@ async function fetchCrateFeatures(crateName: string, version?: string): Promise<
             }
         }
 
-        const features = Object.keys(targetVersion.features || {})
-        const filtered = features.filter(f => !f.startsWith("_"))
+        const filtered = []
+        let features = Object.entries(targetVersion.features || {}).sort(([a], [b]) => a.localeCompare(b))
+        for (const [name, enable] of features) {
+            if (!name.startsWith("_")) {
+                filtered.push({ name, enable })
+            }
+        }
         featuresCache.set(crateNameVerson, filtered)
         return filtered
     } catch (e) {
