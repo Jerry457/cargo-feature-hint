@@ -27,9 +27,9 @@
     },
     "scripts": {
         "watch": "tsc --watch -p ./",
-        "dev": "pnpm run build && pnpm run watch",
+        "dev": "npm run build && npm run watch",
         "build": "tsc -p ./",
-        "package": "pnpm i && pnpm run build && vsce package",
+        "package": "npm i && npm run build && vsce package",
         "publish": "vsce publish"
     },
     "devDependencies": {

@@ -6,7 +6,7 @@
         {
             "label": "dev",
             "type": "shell",
-            "command": "pnpm run dev",
+            "command": "npm run dev",
             "problemMatcher": "$tsc-watch",
             "isBackground": true,
             "presentation": {
