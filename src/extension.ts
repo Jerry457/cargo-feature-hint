@@ -1,5 +1,7 @@
 import * as vscode from "vscode"
 import axios from "axios"
+import * as fs from "fs"
+import * as path from "path"
 
 const featuresCache = new Map<string, string[]>()
 
@@ -16,18 +18,25 @@ export function activate(context: vscode.ExtensionContext) {
             if (!linePrefix.match(/features\s*=\s*\[[^\]]*["']$/)) {
                 return undefined
             }
-            const crateName = getCrateName(document, position)
-            if (!crateName) {
-                return undefined
+
+            const crateInfo = getCrateInfo(document, position)
+            if (!crateInfo) return undefined
+
+            let features: string[] = []
+            if (crateInfo.path) {
+                features = fetchLocalCrateFeatures(crateInfo.path)
+            } else {
+                features = await fetchCrateFeatures(crateInfo.crateName)
             }
 
-            const features = await fetchCrateFeatures(crateName)
             const existingFeatures = getExistingFeatures(lineText)
             const filteredFeatures = features.filter(f => !existingFeatures.has(f))
 
             return filteredFeatures.map(f => {
                 const item = new vscode.CompletionItem(f, vscode.CompletionItemKind.Property)
-                item.detail = `feature of ${crateName}`
+                item.detail = crateInfo.path
+                    ? `local feature of ${crateInfo.crateName}`
+                    : `feature of ${crateInfo.crateName}`
                 return item
             })
         },
@@ -37,31 +46,6 @@ export function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push(disposable)
 }
 
-function getCrateName(document: vscode.TextDocument, position: vscode.Position): string | undefined {
-    const currentLine = document.lineAt(position.line).text
-
-    // serde = { version = "1.0", features = ["
-    const inlineMatch = currentLine.match(/^\s*([\w-]+)\s*=\s*\{/)
-    if (inlineMatch) {
-        return inlineMatch[1]
-    }
-
-    // [dependencies.tokio]
-    // features = ["
-    for (let i = position.line - 1; i >= 0; i--) {
-        const line = document.lineAt(i).text.trim()
-        // [dependencies.crate-name] or [dev-dependencies.crate-name]
-        const tableMatch = line.match(/^\[(?:[a-z-]+\.)([\w-]+)\]/)
-        if (tableMatch) {
-            return tableMatch[1]
-        }
-        if (line.startsWith("[") && !line.includes("dependencies")) {
-            break
-        }
-    }
-    return undefined
-}
-
 function getExistingFeatures(lineText: string): Set<string> {
     const featuresMatch = lineText.match(/features\s*=\s*\[([^\]]*)\]/)
     if (!featuresMatch) return new Set()
@@ -69,6 +53,80 @@ function getExistingFeatures(lineText: string): Set<string> {
     const content = featuresMatch[1]
     const existing = content.match(/["']([^"']+)["']/g) || []
     return new Set(existing.map(s => s.replace(/["']/g, "")))
+}
+
+function getCrateInfo(
+    document: vscode.TextDocument,
+    position: vscode.Position,
+): { crateName: string; path?: string } | undefined {
+    const currentLine = document.lineAt(position.line).text
+    const documentDir = path.dirname(document.uri.fsPath)
+
+    // serde = { version = "1.0", path = "../serde", features = ["
+    const inlineMatch = currentLine.match(/^\s*([\w-]+)\s*=\s*\{/)
+    if (inlineMatch) {
+        const crateName = inlineMatch[1]
+        const pathMatch = currentLine.match(/path\s*=\s*["']([^"']+)["']/)
+        if (pathMatch) {
+            return { crateName, path: path.resolve(documentDir, pathMatch[1]) }
+        }
+        return { crateName }
+    }
+
+    // [dependencies.tokio]
+    for (let i = position.line - 1; i >= 0; i--) {
+        const line = document.lineAt(i).text.trim()
+        const tableMatch = line.match(/^\[(?:[a-z-]+\.)([\w-]+)\]/)
+        if (tableMatch) {
+            const crateName = tableMatch[1]
+            for (let j = i + 1; j < i + 10 && j < document.lineCount; j++) {
+                const nextLine = document.lineAt(j).text.trim()
+                if (nextLine.startsWith("[")) break
+                const pathMatch = nextLine.match(/^path\s*=\s*["']([^"']+)["']/)
+                if (pathMatch) {
+                    return { crateName, path: path.resolve(documentDir, pathMatch[1]) }
+                }
+            }
+            return { crateName }
+        }
+        if (line.startsWith("[") && !line.includes("dependencies")) break
+    }
+
+    return undefined
+}
+
+function fetchLocalCrateFeatures(cratePath: string): string[] {
+    try {
+        const tomlPath = path.join(cratePath, "Cargo.toml")
+        if (!fs.existsSync(tomlPath)) return []
+
+        const content = fs.readFileSync(tomlPath, "utf-8")
+        const features: string[] = []
+        let inFeaturesSection = false
+
+        for (const line of content.split(/\r?\n/)) {
+            const trimmed = line.trim()
+            if (trimmed === "[features]") {
+                inFeaturesSection = true
+                continue
+            }
+            if (inFeaturesSection && trimmed.startsWith("[")) {
+                inFeaturesSection = false
+                continue
+            }
+
+            if (inFeaturesSection) {
+                const match = trimmed.match(/^([\w-]+)\s*=/)
+                if (match) {
+                    features.push(match[1])
+                }
+            }
+        }
+        return features
+    } catch (e) {
+        console.error("Failed to fetch features for local crate", e)
+        return []
+    }
 }
 
 async function fetchCrateFeatures(crateName: string): Promise<string[]> {
