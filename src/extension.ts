@@ -2,7 +2,7 @@ import * as vscode from "vscode"
 import axios from "axios"
 import * as fs from "fs"
 import * as path from "path"
-
+// <name@version, features>
 const featuresCache = new Map<string, string[]>()
 
 export function activate(context: vscode.ExtensionContext) {
@@ -26,7 +26,7 @@ export function activate(context: vscode.ExtensionContext) {
             if (crateInfo.path) {
                 features = fetchLocalCrateFeatures(crateInfo.path)
             } else {
-                features = await fetchCrateFeatures(crateInfo.crateName)
+                features = await fetchCrateFeatures(crateInfo.crateName, crateInfo.version)
             }
 
             const existingFeatures = getExistingFeatures(lineText)
@@ -36,7 +36,7 @@ export function activate(context: vscode.ExtensionContext) {
                 const item = new vscode.CompletionItem(f, vscode.CompletionItemKind.Property)
                 item.detail = crateInfo.path
                     ? `local feature of ${crateInfo.crateName}`
-                    : `feature of ${crateInfo.crateName}`
+                    : `feature ${crateInfo.version || "latest"} of ${crateInfo.crateName}`
                 return item
             })
         },
@@ -58,7 +58,7 @@ function getExistingFeatures(lineText: string): Set<string> {
 function getCrateInfo(
     document: vscode.TextDocument,
     position: vscode.Position,
-): { crateName: string; path?: string } | undefined {
+): { crateName: string; path?: string; version?: string } | undefined {
     const currentLine = document.lineAt(position.line).text
     const documentDir = path.dirname(document.uri.fsPath)
 
@@ -67,10 +67,13 @@ function getCrateInfo(
     if (inlineMatch) {
         const crateName = inlineMatch[1]
         const pathMatch = currentLine.match(/path\s*=\s*["']([^"']+)["']/)
-        if (pathMatch) {
-            return { crateName, path: path.resolve(documentDir, pathMatch[1]) }
+        const versionMatch = currentLine.match(/version\s*=\s*["']([^"']+)["']/)
+
+        return {
+            crateName,
+            path: pathMatch ? path.resolve(documentDir, pathMatch[1]) : undefined,
+            version: versionMatch ? versionMatch[1] : undefined,
         }
-        return { crateName }
     }
 
     // [dependencies.tokio]
@@ -79,15 +82,21 @@ function getCrateInfo(
         const tableMatch = line.match(/^\[(?:[a-z-]+\.)([\w-]+)\]/)
         if (tableMatch) {
             const crateName = tableMatch[1]
-            for (let j = i + 1; j < i + 10 && j < document.lineCount; j++) {
+            let foundPath: string | undefined
+            let foundVersion: string | undefined
+
+            const max_search_lines = 15
+            for (let j = i + 1; j < i + max_search_lines && j < document.lineCount; j++) {
                 const nextLine = document.lineAt(j).text.trim()
                 if (nextLine.startsWith("[")) break
+
                 const pathMatch = nextLine.match(/^path\s*=\s*["']([^"']+)["']/)
-                if (pathMatch) {
-                    return { crateName, path: path.resolve(documentDir, pathMatch[1]) }
-                }
+                if (pathMatch) foundPath = path.resolve(documentDir, pathMatch[1])
+
+                const versionMatch = nextLine.match(/^version\s*=\s*["']([^"']+)["']/)
+                if (versionMatch) foundVersion = versionMatch[1]
             }
-            return { crateName }
+            return { crateName, path: foundPath, version: foundVersion }
         }
         if (line.startsWith("[") && !line.includes("dependencies")) break
     }
@@ -129,25 +138,44 @@ function fetchLocalCrateFeatures(cratePath: string): string[] {
     }
 }
 
-async function fetchCrateFeatures(crateName: string): Promise<string[]> {
-    if (featuresCache.has(crateName)) {
-        return featuresCache.get(crateName)!
+type CargoVersionInfo = {
+    num: string // version number
+    features: { [feature: string]: string[] }
+}
+async function fetchCrateFeatures(crateName: string, version?: string): Promise<string[]> {
+    const crateNameVerson = version ? `${crateName}@${version}` : `${crateName}@latest`
+    if (featuresCache.has(crateNameVerson)) {
+        return featuresCache.get(crateNameVerson)!
     }
 
     try {
         const response = await axios.get(`https://crates.io/api/v1/crates/${crateName}`, {
             headers: { "User-Agent": "cargo-feature-autocomplete" },
-            timeout: 3000,
+            timeout: 5000,
         })
 
-        const versions = response.data.versions
-        if (versions && versions.length > 0) {
-            const features = Object.keys(versions[0].features || {})
-            const filtered = features.filter(f => !f.startsWith("_"))
+        const versions = response.data.versions as CargoVersionInfo[]
+        if (!versions || versions.length === 0) return []
 
-            featuresCache.set(crateName, filtered)
-            return filtered
+        let targetVersion = versions[0] // default latest version
+        if (version) {
+            const versionNum = version.replace(/[\^~=]/g, "").trim()
+            const match = versions.find(v => v.num === versionNum)
+            if (match) {
+                targetVersion = match
+            } else {
+                // 0.1.2 -> 0.1
+                const partialMatch = versions.find(v => v.num.startsWith(versionNum))
+                if (partialMatch) {
+                    targetVersion = partialMatch
+                }
+            }
         }
+
+        const features = Object.keys(targetVersion.features || {})
+        const filtered = features.filter(f => !f.startsWith("_"))
+        featuresCache.set(crateNameVerson, filtered)
+        return filtered
     } catch (e) {
         console.error(`Failed to fetch features for ${crateName}`, e)
     }
