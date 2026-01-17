@@ -1,5 +1,5 @@
 <p align="center">
-<img src="https://crates.io/assets/cargo.png" width="150" />
+<img src="https://crates.io/images/cargo.png" width="150" />
 </p>
 
 <h1 align="center">Cargo Feature Hint</h1>
@@ -16,4 +16,4 @@
 ## ✨Features
 
 Auto hint crate features in Cargo.toml, support local crates and remote crates.
-![Showcase](assets/showcase.webp)
+![Showcase](images/showcase.webp)

@@ -2,12 +2,12 @@
     "name": "cargo-feature-hint",
     "displayName": "Cargo Feature Hint",
     "license": "MIT",
-    "version": "1.0.4",
+    "version": "1.0.5",
     "publisher": "Jerry457",
     "engines": {
         "vscode": "^1.100.0"
     },
-    "icon": "assets/cargo.png",
+    "icon": "images/cargo.webp",
     "categories": [
         "Programming Languages"
     ],
