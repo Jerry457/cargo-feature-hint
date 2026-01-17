@@ -2,7 +2,7 @@
     "name": "cargo-feature-hint",
     "displayName": "Cargo Feature Hint",
     "license": "MIT",
-    "version": "1.0.3",
+    "version": "1.0.4",
     "publisher": "Jerry457",
     "engines": {
         "vscode": "^1.100.0"
