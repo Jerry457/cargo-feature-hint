@@ -16,5 +16,4 @@
 ## ✨Features
 
 Auto hint crate features in Cargo.toml, support local crates and remote crates.
-
-<p align="center"><img src="https://github.com/Jerry457/cargo-feature-hint/blob/main/assets/showcase.webp"/></p>
+![Showcase](assets/showcase.webp)
