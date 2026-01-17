@@ -2,7 +2,7 @@
     "name": "cargo-feature-hint",
     "displayName": "Cargo Feature Hint",
     "license": "MIT",
-    "version": "1.0.1",
+    "version": "1.0.2",
     "publisher": "Jerry457",
     "engines": {
         "vscode": "^1.100.0"
@@ -11,6 +11,7 @@
         "Programming Languages"
     ],
     "repository": {
+        "directory": "https://github.com/Jerry457/cargo-feature-hint",
         "type": "git"
     },
     "activationEvents": [
