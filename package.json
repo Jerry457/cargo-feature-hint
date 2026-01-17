@@ -12,7 +12,7 @@
         "Programming Languages"
     ],
     "repository": {
-        "directory": "https://github.com/Jerry457/cargo-feature-hint",
+        "url": "https://github.com/Jerry457/cargo-feature-hint",
         "type": "git"
     },
     "activationEvents": [
