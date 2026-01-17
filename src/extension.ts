@@ -172,12 +172,17 @@ async function fetchCrateFeatures(crateName: string, version?: string): Promise<
     }
 
     try {
-        const response = await axios.get(`https://crates.io/api/v1/crates/${crateName}`, {
+        const response = await fetch(`https://crates.io/api/v1/crates/${crateName}`, {
             headers: { "User-Agent": "cargo-feature-autocomplete" },
-            timeout: 5000,
+            signal: AbortSignal.timeout(5000),
         })
 
-        const versions = response.data.versions as CargoVersionInfo[]
+        if (!response.ok) {
+            throw new Error(`fetch error: ${response.status}`)
+        }
+
+        const data = await response.json()
+        const versions = data.versions as CargoVersionInfo[]
         if (!versions || versions.length === 0) return []
 
         let targetVersion = versions[0] // default latest version
