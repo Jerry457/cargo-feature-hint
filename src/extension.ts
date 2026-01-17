@@ -1,5 +1,4 @@
 import * as vscode from "vscode"
-import axios from "axios"
 import * as fs from "fs"
 import * as path from "path"
 
@@ -203,7 +202,7 @@ async function fetchCrateFeatures(crateName: string, version?: string): Promise<
         const filtered = []
         let features = Object.entries(targetVersion.features || {}).sort(([a], [b]) => a.localeCompare(b))
         for (const [name, enable] of features) {
-            if (!name.startsWith("_")) {
+            if (!name.startsWith("_") && name !== "default") {
                 filtered.push({ name, enable })
             }
         }
